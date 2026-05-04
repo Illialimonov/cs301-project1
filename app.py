@@ -13,6 +13,12 @@ import io
 df = pd.read_csv("Housing.csv").drop_duplicates()
 model = LinearRegression()
 
+EXPECTED_COLUMNS = {
+    "price", "area", "bedrooms", "bathrooms", "stories",
+    "mainroad", "guestroom", "basement", "hotwaterheating",
+    "airconditioning", "parking", "prefarea", "furnishingstatus"
+}
+
 
 
 app = dash.Dash(__name__)
@@ -25,6 +31,7 @@ app.layout = html.Div(className='main', children=[
             children=html.Button('Upload CSV File'),
             multiple=False
         ),
+        html.P(id='upload-status'),
         html.P("Select Target Variable:"),
         dcc.Dropdown(
             id='target-select',
@@ -60,17 +67,39 @@ app.layout = html.Div(className='main', children=[
 ])
 
 def parse_contents(contents, filename):
+    #Parse an uploaded CSV and return (DataFrame, error_message). Returns (None, error_msg) on failure, (df, None) on success.
+    if not filename.lower().endswith('.csv'):
+        return None, "Only .csv files are supported."
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
     try:
-        if 'csv' in filename:
-            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+        parsed_df = pd.read_csv(io.StringIO(decoded.decode('utf-8'))).drop_duplicates()
     except Exception as e:
-        print(e)
-        return False
-    return True
+        return None, f"Could not read file: {e}"
+
+    missing = EXPECTED_COLUMNS - set(parsed_df.columns)
+    if missing:
+        return None, f"CSV is missing required columns: {', '.join(sorted(missing))}"
+
+    return parsed_df, None
 
 
+
+@app.callback(
+    Output('upload-status', 'children'),
+    Input('upload-csv', 'contents'),
+    State('upload-csv', 'filename'),
+    prevent_initial_call=True
+)
+def handle_upload(contents, filename):
+    global df
+    if contents is None:
+        return "", {"display": "none"}
+    parsed, error = parse_contents(contents, filename)
+    if error:
+        return f"{error}"
+    df = parsed
+    return f"Loaded '{filename}' — {len(df)} rows."
 
 
 @app.callback(
