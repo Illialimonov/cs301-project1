@@ -11,6 +11,7 @@ import base64
 import io
 
 df = pd.read_csv("Housing.csv").drop_duplicates()
+model = LinearRegression()
 
 
 
@@ -47,12 +48,12 @@ app.layout = html.Div(className='main', children=[
         dcc.Graph(id='corr-chart')
     ]),
     html.Div(className='train', children=[
-        dcc.Checklist(id="training-features", options=df.columns.unique(), inline=True),
+        dcc.Checklist(id="training-features", options=df.columns.unique(), value=[df.columns.unique()[1]], inline=True),
         dcc.Button('Train', id="train-button"),
         html.P("R2 Score:", id="r2"),
     ]),
     html.Div(className='prediction', children=[
-        dcc.Input(),
+        dcc.Input(id='predict-field'),
         html.Button('Predict', id='predict-button'),
         html.P("Predicted value:", id="predict-value")
     ])
@@ -68,6 +69,7 @@ def parse_contents(contents, filename):
         print(e)
         return False
     return True
+
 
 
 
@@ -111,21 +113,48 @@ def train(click, features, target):
     # Use dummies for the "furnishingstatus" column
     train_df = pd.get_dummies(train_df, columns=["furnishingstatus"], drop_first=True)
 
+    #Adjust features for one hot
+    if "furnishingstatus" in features:
+         features.remove("furnishingstatus")
+         features.append("furnishingstatus_semi-furnished")
+         features.append("furnishingstatus_unfurnished")
+
 # The target variable is price, which is a numerical variable, so this is a regression problem. The dataset contains 8 features, including both numerical and categorical variables.
     y = train_df[target]   # target variable
     X = train_df[features]  # features
+    
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     # Initialize and train a Linear Regression model
-    lr = LinearRegression()
-    lr.fit(X_train, y_train)
+    #lr = LinearRegression()
+    model.fit(X_train, y_train)
 
-    #Test
-    y_pred_lr = lr.predict(X_test)
+
+    
+    y_pred_lr = model.predict(X_test)
+
 
 
     return ["R2 Score: ", r2_score(y_test, y_pred_lr)]
+
+#Predict
+@app.callback(
+    Output('predict-value','children'),
+    Input('predict-button', 'n_clicks'),
+    State('predict-field', 'value'),
+    prevent_initial_call=True
+    
+)
+
+def predict(click, predict):
+
+    entered_features = str(predict).split(sep=',')
+    arr = np.array(entered_features, dtype=int).reshape(1,-1)
+    print(arr)
+    result = model.predict(arr)
+    return result
+
 
 if __name__ == '__main__':
     app.run(debug=True)
